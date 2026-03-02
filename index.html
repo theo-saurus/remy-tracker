@@ -85,7 +85,7 @@
                 const inferEngine = new InferenceEngine();
                 
                 statusText.innerText = "Status: Downloading Model to Phone...";
-                const workerId = await inferEngine.startWorker("dog-poses-q81vj", 2, PUBLISHABLE_KEY);
+                const workerId = await inferEngine.startWorker("dogs-pose-default-6febm", 1, PUBLISHABLE_KEY);
                 
                 statusText.innerText = "Status: Starting Camera...";
                 await startCamera();
@@ -134,4 +134,5 @@
     </script>
 </body>
 </html>
+
 
