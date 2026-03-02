@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remy Live Tracker (Edge)</title>
+    <style>
+        body { margin: 0; background: black; color: white; font-family: sans-serif; overflow: hidden; }
+        
+        /* Container stacks the video and the drawing canvas exactly on top of each other */
+        #container { position: relative; width: 100vw; height: 100vh; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        
+        /* The UI overlay */
+        #ui { position: absolute; bottom: 30px; left: 20px; z-index: 10; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="overlay"></canvas>
+    </div>
+    
+    <div id="ui">
+        <h3 style="margin: 0 0 5px 0;">Remy Tracker (Edge)</h3>
+        <div id="status">Status: Loading AI Engine...</div>
+    </div>
+
+    <script type="module">
+        import { InferenceEngine, CVImage } from "https://esm.sh/inferencejs";
+
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+
+        async function startApp() {
+            try {
+                // 1. Initialize the AI Engine
+                const inferEngine = new InferenceEngine();
+                
+                // IMPORTANT: Go to Roboflow Settings -> API -> Get your Publishable Key
+                const PUBLISHABLE_KEY = "YOUR_PUBLISHABLE_KEY"; 
+                
+                statusText.innerText = "Status: Downloading Model to Phone...";
+                
+                // 2. Load the specific dog behavior model into browser memory
+                const workerId = await inferEngine.startWorker("dog-poses-q81vj", 2, PUBLISHABLE_KEY);
+                
+                statusText.innerText = "Status: Starting Camera...";
+                
+                // 3. Start Webcam (facingMode: "environment" forces the back camera and fixes mirroring)
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                video.srcObject = stream;
+
+                // Once the video starts playing, align the canvas and start tracking
+                video.onloadeddata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    statusText.innerText = "Status: Tracking Live!";
+                    
+                    // Start the infinite loop
+                    detectFrame(inferEngine, workerId);
+                };
+            } catch (err) {
+                statusText.innerText = "Error: " + err.message;
+            }
+        }
+
+        async function detectFrame(inferEngine, workerId) {
+            // Grab the current frame
+            const img = new CVImage(video);
+            
+            // Run inference locally! (This takes milliseconds instead of seconds)
+            const predictions = await inferEngine.infer(workerId, img);
+            
+            // Clear the old boxes
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the new boxes
+            predictions.forEach(p => {
+                // Ignore guesses under 40% confidence
+                if (p.confidence < 0.40) return;
+
+                // Roboflow returns the center (x,y). We calculate the top-left corner to draw the box.
+                const x = p.bbox.x - p.bbox.width / 2;
+                const y = p.bbox.y - p.bbox.height / 2;
+                
+                // Draw Box
+                ctx.strokeStyle = "#00FF00";
+                ctx.lineWidth = 6;
+                ctx.strokeRect(x, y, p.bbox.width, p.bbox.height);
+                
+                // Draw Text
+                ctx.fillStyle = "#00FF00";
+                ctx.font = "bold 30px Arial";
+                ctx.fillText(`Remy: ${p.class.toUpperCase()}`, x, y - 10);
+            });
+
+            // Loop immediately for the next frame
+            requestAnimationFrame(() => detectFrame(inferEngine, workerId));
+        }
+
+        startApp();
+    </script>
+</body>
+</html>
